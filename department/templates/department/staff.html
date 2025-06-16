@@ -1,0 +1,300 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Department Staff Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="{% static 'assets/favicon-icon.png' %}">
+    <link rel="stylesheet" href="{% static 'css/staff.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="logo">
+            <img src="{% static 'assets/smartCityLogo.png' %}" alt="Logo">
+        </div>
+        <div class="search-container">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" class="search-input" placeholder="Search complaints...">
+        </div>
+        <div class="actions">
+            <img src="{% static 'assets/user.svg' %}" alt="" class="user-icon">
+            <p>Hello! <span id="user-name">{{ user.username }}</span></p>
+            <button class="btn btn-getstarted" onclick="window.location.href='/logout/'">Logout</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="status-counts">
+            <div class="total"><h2>Total Complaints:</h2><h4 id="count-total">{{ total_complaints }}</h4></div>
+            <div class="resolved"><h2>Resolved</h2><h4 id="count-resolved">{{ status_counts.Resolved }}</h4></div>
+            <div class="progress"><h2>In Progress</h2><h4 id="count-inprogress">{{ status_counts.InProgress }}</h4></div>
+            <div class="pending"><h2>Pending</h2><h4 id="count-pending">{{ status_counts.Pending }}</h4></div>
+            <div class="reject"><h2>Rejected</h2><h4 id="count-rejected">{{ status_counts.Rejected }}</h4></div>
+        </div>
+
+        <div class="content">
+            <h2>Complaints Overview - {{ department.name }}</h2>
+            <div class="header">
+                <div class="filterdiv">
+                    <label for="filtertype">Filter:</label>
+                    <select id="filtertype">
+                        <option value="All" selected>All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="department-section">
+                <table class="complaint-table">
+                    <thead>
+                        <tr>
+                            <th data-sort="complaint_id">Complaint ID</th>
+                            <th>Sub Category</th>
+                            <th>Description</th>
+                            <th data-sort="created_at">Date</th>
+                            <th>Location</th>
+                            <th>Image</th>
+                            <th data-sort="status">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for complaint in department_complaints %}
+                        <tr data-department="{{ complaint.department.name }}">
+                            <td>{{ complaint.complaint_id }}</td>
+                            <td>{{ complaint.subCategory }}</td>
+                            <td>{{ complaint.description }}</td>
+                            <td>{{ complaint.created_at|date:"M-d-y" }}</td>
+                            <td>{{ complaint.address }}</td>
+                            <td>
+                                {% if complaint.image_upload %}
+                                    <img src="/static/{{ complaint.image_upload }}" alt="Complaint Image" style="max-width: 300px;">
+                                {% else %}
+                                    <p>No image uploaded.</p>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <select class="status-dropdown status">
+                                    <option value="Pending" {% if complaint.status == "Pending" %}selected{% endif %}>Pending</option>
+                                    <option value="In Progress" {% if complaint.status == "In Progress" %}selected{% endif %}>In Progress</option>
+                                    <option value="Resolved" {% if complaint.status == "Resolved" %}selected{% endif %}>Resolved</option>
+                                    <option value="Rejected" {% if complaint.status == "Rejected" %}selected{% endif %}>Rejected</option>
+                                </select>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" style="text-align:center;">No complaints found.</td></tr>
+                        {% endfor %}
+                        <tr id="no-data-row" style="display:none;"><td colspan="8" style="text-align:center;">No complaints found.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+    <div class="footer-container" id="contact-details">
+      <div class="footer-about">
+        <h3>About Smart City</h3>
+        <p>
+          Empowering sustainable urban innovation and citizen engagement for a
+          better tomorrow.
+        </p>
+      </div>
+      <div class="footer-contact">
+        <h4>Contact Us</h4>
+        <p>L76A, L Block, 21st Street, Anna Nagar, Chennai, Tamil Nadu 600102</p>
+        <p>Phone: +91 99627XXXX</p>
+        <p>Email: smartcity@org.com</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      &copy; 2025 Smart City Initiative. All rights reserved.
+    </div>
+  </footer>
+
+    <div id="complaintModal" class="modal">
+        <div class="modal-content">
+            <span id="closeModal" class="close">&times;</span>
+            <h2>Complaint Details</h2>
+            <div id="complaintDetails"></div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const updateUrl = "{% url 'update_complaint_status' %}"; 
+        const filterSelect = document.getElementById('filtertype');
+        const searchInput = document.querySelector('.search-input');
+        const tbody = document.querySelector('.complaint-table tbody');
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+
+        function applyStatusColors() {
+            document.querySelectorAll('.status-dropdown').forEach(el => {
+                const colorMap = {
+                    'pending': '#dc3545',
+                    'resolved': '#28a745',
+                    'in progress': '#ff8c00',
+                    'rejected': '#6c757d'
+                };
+                el.style.color = colorMap[el.value.toLowerCase()] || 'black';
+            });
+        }
+
+        function countFilteredComplaints() {
+            const counts = { Resolved: 0, "In Progress": 0, Pending: 0, Rejected: 0 };
+            let total = 0;
+            document.querySelectorAll('.complaint-table tbody tr').forEach(row => {
+                if (row.id === "no-data-row") return;
+                if (row.style.display !== 'none') {
+                    const status = row.querySelector('.status')?.value;
+                    if (counts.hasOwnProperty(status)) counts[status]++;
+                    total++;
+                }
+            });
+            document.getElementById('count-total').textContent = total;
+            document.getElementById('count-resolved').textContent = counts.Resolved;
+            document.getElementById('count-inprogress').textContent = counts["In Progress"];
+            document.getElementById('count-pending').textContent = counts.Pending;
+            document.getElementById('count-rejected').textContent = counts.Rejected;
+        }
+
+        function getSortValue(row, key) {
+            const cells = row.querySelectorAll('td');
+            switch (key) {
+                case 'complaint_id': return parseInt(cells[0].textContent.trim()) || 0;
+                case 'username': return cells[1].textContent.trim().toLowerCase();
+                case 'status': return cells[7].querySelector('select').value.toLowerCase();
+                case 'created_at': return new Date(cells[4].textContent.trim()).getTime();
+                default: return '';
+            }
+        }
+
+        function setupHeaderSort() {
+            document.querySelectorAll('th[data-sort]').forEach(header => {
+                header.addEventListener('click', () => {
+                    const key = header.getAttribute('data-sort');
+                    const ascending = !header.classList.contains('asc');
+                    document.querySelectorAll('th').forEach(h => h.classList.remove('asc', 'desc'));
+                    header.classList.add(ascending ? 'asc' : 'desc');
+
+                    const rows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.id !== "no-data-row");
+
+                    rows.sort((a, b) => {
+                        const valA = getSortValue(a, key);
+                        const valB = getSortValue(b, key);
+                        if (!isNaN(valA) && !isNaN(valB)) return ascending ? valA - valB : valB - valA;
+                        return ascending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    });
+
+                    rows.forEach(row => tbody.insertBefore(row, document.getElementById('no-data-row')));
+                });
+            });
+        }
+
+        function filterTable() {
+            const searchText = searchInput.value.toLowerCase();
+            const selectedStatus = filterSelect.value;
+            const rows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.id !== "no-data-row");
+            let matchCount = 0;
+
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const name = cells[1].textContent.toLowerCase();
+                const id = cells[0].textContent.toLowerCase();
+                const status = row.querySelector('.status')?.value;
+
+                const matchesSearch = name.includes(searchText) || id.includes(searchText);
+                const matchesStatus = selectedStatus === 'All' || status === selectedStatus;
+
+                if (matchesSearch && matchesStatus) {
+                    row.style.display = '';
+                    matchCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            document.getElementById('no-data-row').style.display = (matchCount === 0) ? '' : 'none';
+            countFilteredComplaints();
+            applyStatusColors();
+        }
+
+        document.querySelectorAll('.status-dropdown').forEach(dropdown => {
+            dropdown.addEventListener('change', (event) => {
+                const newStatus = event.target.value;
+                const row = event.target.closest('tr');
+                const complaintId = row.querySelector('td').textContent.trim();
+
+                fetch(updateUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ complaint_id: complaintId, status: newStatus })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) alert("Error updating status");
+                    applyStatusColors();
+                    countFilteredComplaints();
+                })
+                .catch(error => alert("Error: " + error));
+            });
+        });
+
+        function setupComplaintModal() {
+            document.querySelectorAll('.complaint-table tbody tr').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    // Prevent modal if dropdown is clicked
+                    if (e.target.tagName === 'SELECT') return;
+
+                    const cells = row.querySelectorAll('td');
+                    const complaintId = cells[0].textContent.trim();
+                    const description = cells[1].textContent.trim();
+                    const date = cells[3].textContent.trim();
+                    const location = cells[4].textContent.trim();
+                    const status = row.querySelector('.status').value.trim();
+                    const imgEl = cells[5].querySelector('img');
+                    const imageUrl = imgEl ? imgEl.src : null;
+                    const detailsDiv = document.getElementById('complaintDetails');
+                    detailsDiv.innerHTML = `
+                        <p><strong>Complaint ID:</strong> ${complaintId}</p>
+                        <p><strong>Description:</strong> ${description}</p>
+                        <p><strong>Date:</strong> ${date}</p>
+                        <p><strong>Location:</strong> ${location}</p>
+                        <p><strong>Status:</strong> ${status}</p>
+                        ${imageUrl ?` <p><strong>Image:</strong><br><img src="${imageUrl}" alt="Complaint Image"></p>` : '<p><strong>Image:</strong> No image</p>'}
+                    `;
+                    document.getElementById('complaintModal').style.display = 'block';
+                });
+            });
+            document.getElementById('closeModal').addEventListener('click', () => {
+                document.getElementById('complaintModal').style.display = 'none';
+            });
+            window.addEventListener('click', (event) => {
+                const modal = document.getElementById('complaintModal');
+                if (event.target === modal) modal.style.display = 'none';
+            });
+        }
+
+        filterSelect.addEventListener('change', filterTable);
+        searchInput.addEventListener('input', filterTable);
+
+        applyStatusColors();
+        setupHeaderSort();
+        countFilteredComplaints();
+        setupComplaintModal();
+    });
+    </script>
+</body>
+</html>

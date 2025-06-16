@@ -1,0 +1,613 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Citizen Page</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="{% static 'css/user.css' %}" />
+  <link rel="icon" type="image/x-icon" href="{% static 'assets/favicon-icon.png' %}">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+
+<body>
+  <header class="navbar">
+    <div class="logo">
+      <img src="{% static 'assets/smartCityLogo.png' %}" alt="">
+    </div>
+    <div class="search-container">
+      <i class="fas fa-search search-icon"></i>
+      <input type="text" class="search-input" id="complaintSearch" placeholder="Search complaints...">
+    </div>
+    <div class="actions">
+      <img src="{% static 'assets/user.svg' %}" alt="" class="user-icon">
+      <p>Hello!
+      <p id="user-name">{{ user.username }}</p>
+      </p>
+      <button class="btn btn-getstarted" onclick="window.location.href='/logout/'">Logout</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="dashboard">
+      <section class="dashboard-header">
+        <section class="stats">
+          <div class="card user-resolved">
+            <h3>Resolved</h3>
+            <span>{{ resolved_count }}</span>
+          </div>
+          <div class="card user-progress">
+            <h3>In Progress</h3>
+            <span>{{ in_progress_count }}</span>
+          </div>
+          <div class="card user-rejected">
+            <h3>Rejected</h3>
+            <span>{{ rejected_count }}</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="complaint-main" id="user-complaint">
+        <div class="complaints-actions">
+          <h2>My Complaints</h2>
+          <button class="complaintButton" id="openComplaintModal"><i class="fa-solid fa-plus"></i>Add Complaints</button>
+        </div>
+        <div id="noResults" style="display: none; text-align: center; font-size: 1.2rem; color: #888; margin-top: 20px;">
+          No complaints found.
+        </div>
+
+        <div id="complaintList">
+          {% if complaints %}
+          <div class="complaints-grid">
+            {% for complaint in complaints %}
+            <div class="complaint-card">
+              <div class="card-header">
+                <span class="complaint-id">#{{ complaint.complaint_id }}</span>
+                <span class="status {{ complaint.status|lower|slugify }}">{{ complaint.status }}</span>
+              </div>
+              <div class="card-body">
+                <p><strong>Department:</strong> {{ complaint.department.name }}</p>
+                <p><strong>Sub-Category:</strong> {{ complaint.subCategory.name }}</p>
+                <p><strong>Description:</strong> {{ complaint.description|truncatechars:100 }}</p>
+                <button class="view-details-btn" data-complaint-id="{{ complaint.complaint_id }}">View Details</button>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p>No complaints submitted yet.</p>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="complaintModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Add New Complaint</h2>
+      <form method="POST" enctype="multipart/form-data" id="complaintForm">
+        {% csrf_token %}
+
+        <div class="form-step active" id="step1">
+          <label for="department">Department</label>
+          <select name="department" id="department" required>
+            <option value="">-- Select Department --</option>
+            {% for dept in departments %}
+            <option value="{{ dept.department_id }}">{{ dept.name }}</option>
+            {% endfor %}
+          </select>
+
+          <label for="subCategory">Sub Category</label>
+          <select name="subCategory" id="subCategory" required>
+            <option value="">-- Select SubCategory --</option>
+          </select>
+
+          <label for="description">Description:</label>
+          <textarea name="description" rows="4" cols="50" required></textarea>
+
+          <div class="form-navigation">
+            <button type="button" class="btn next-step">Next</button>
+          </div>
+        </div>
+
+        <div class="form-step" id="step2">
+          <label for="states">State</label>
+          <select name="state" id="states" required>
+            <option value="">-- Select State --</option>
+            {% for state in states %}
+            <option value="{{ state.state_id }}">{{ state.name }}</option>
+            {% endfor %}
+          </select>
+
+          <label for="districts">District</label>
+          <select name="district" id="districts" required>
+            <option value="">-- Select District --</option>
+          </select>
+          
+          <label for="address">House No, Street Name, Building Name</label>
+          <input type="text" name="address" id="address" placeholder="Enter door no, street name" required>
+
+          <label for="pin">Pincode</label>
+          <input type="text" name="pincode" pattern="[0-9]{6}" maxlength="6" placeholder="Enter pincode" required>
+
+          <div class="form-navigation">
+            <button type="button" class="btn prev-step">Previous</button>
+            <button type="button" class="btn next-step">Next</button>
+          </div>
+        </div>
+
+        <div class="form-step" id="step3">
+          <div class="map-container">
+            <div id="miniMap" style="height: 200px; width: 100%; margin: 1rem 0;"></div>
+          </div>
+
+          <input type="hidden" id="latitude" name="latitude">
+          <input type="hidden" id="longitude" name="longitude">
+
+          <div class="location-actions">
+            <button type="button" id="getLocation" class="btn">Use Current Location</button>
+            <span id="locationStatus"></span>
+          </div>
+
+          <label for="image_upload">Upload Image:</label>
+          <input type="file" multiple name="image_upload">
+
+          <div class="form-navigation">
+            <button type="button" class="btn prev-step">Previous</button>
+            <input type="submit" value="Submit Complaint" class="btn btn-submit">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="complaintDetailModal" class="modal">
+    <div class="modal-content detail-modal">
+      <span class="close-detail-modal">&times;</span>
+      <h2>Complaint Details</h2>
+      <div class="detail-container">
+        <div class="detail-section">
+          <div class="detail-header">
+            <span class="complaint-id">#<span id="detail-complaint-id"></span></span>
+            <span class="status" id="detail-status"></span>
+          </div>
+
+          <div class="detail-group">
+            <label>Department:</label>
+            <div class="detail-value" id="detail-department"></div>
+          </div>
+
+          <div class="detail-group">
+            <label>Sub-Category:</label>
+            <div class="detail-value" id="detail-subcategory"></div>
+          </div>
+
+          <div class="detail-group">
+            <label>Date Submitted:</label>
+            <div class="detail-value" id="detail-created-at"></div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-group">
+            <label>Description:</label>
+            <div class="detail-value description-text" id="detail-description"></div>
+          </div>
+
+          <div class="detail-group">
+            <label>Address:</label>
+            <div class="detail-value" id="detail-address"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="profileSidebar" class="sidebar">
+    <span class="close-sidebar" id="closeSidebar">&times;</span>
+    <h2>Profile</h2>
+    <form method="POST" id="profileForm">
+      {% csrf_token %}
+      <div class="profile-details" id="profileDisplay">
+        <p><strong>Name:</strong> {{ user.first_name }} {{ user.last_name }}</p>
+        <p><strong>Username:</strong> {{ user.username }}</p>
+        <p><strong>Email:</strong> {{ user.email }}</p>
+        <p><strong>Phone:</strong> {{ user.phone }}</p>
+        <button type="button" class="btn" onclick="enableEdit()">Update</button>
+      </div>
+
+      <div class="profile-edit" id="profileEdit" style="display: none;">
+        <label>First Name</label>
+        <input type="text" name="first_name" value="{{ user.first_name }}" required>
+
+        <label>Last Name</label>
+        <input type="text" name="last_name" value="{{ user.last_name }}" required>
+
+        <label>Username</label>
+        <input type="text" name="username" value="{{ user.username }}" required>
+
+        <label>Email</label>
+        <input type="email" name="email" value="{{ user.email }}" required>
+
+        <label for="phone">Phone</label>
+        <input type="tel" id="phone" name="phone" pattern="^[6-9][0-9]{9}$" value="{{ user.phone }}" maxlength="10"
+          title="Enter a valid 10-digit Indian mobile number starting with 6-9" required>
+
+        <div class="edit-buttons">
+          <button type="submit" class="btn btn-getstarted">Save</button>
+          <button type="button" class="btn" onclick="cancelEdit()">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <footer>
+    <div class="footer-container" id="contact-details">
+      <div class="footer-about">
+        <h3>About Smart City</h3>
+        <p>
+          Empowering sustainable urban innovation and citizen engagement for a
+          better tomorrow.
+        </p>
+      </div>
+      <div class="footer-contact">
+        <h4>Contact Us</h4>
+        <p>L76A, L Block, 21st Street, Anna Nagar, Chennai, Tamil Nadu 600102</p>
+        <p>Phone: +91 99627XXXX</p>
+        <p>Email: smartcity@org.com</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      &copy; 2025 Smart City Initiative. All rights reserved.
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    let map;
+    let marker;
+
+    function initMap() {
+      map = L.map('miniMap').setView([20.5937, 78.9629], 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      map.on('click', function (e) {
+        if (marker) {
+          map.removeLayer(marker);
+        }
+        marker = L.marker(e.latlng).addTo(map);
+        document.getElementById('latitude').value = e.latlng.lat;
+        document.getElementById('longitude').value = e.latlng.lng;
+      });
+    }
+
+    document.getElementById('getLocation').addEventListener('click', function () {
+      const status = document.getElementById('locationStatus');
+      status.textContent = 'Locating...';
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function (position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lng;
+
+            if (map) {
+              map.setView([lat, lng], 15);
+              if (marker) {
+                map.removeLayer(marker);
+              }
+              marker = L.marker([lat, lng]).addTo(map);
+            }
+
+            status.textContent = 'Location found!';
+            setTimeout(() => status.textContent = '', 3000);
+          },
+          function (error) {
+            status.textContent = 'Error getting location: ' + error.message;
+            setTimeout(() => status.textContent = '', 5000);
+          }
+        );
+      } else {
+        status.textContent = 'Geolocation is not supported by this browser.';
+        setTimeout(() => status.textContent = '', 5000);
+      }
+    });
+
+    document.getElementById('openComplaintModal').addEventListener('click', function () {
+      setTimeout(initMap, 500);
+    });
+
+    document.querySelector('.close').addEventListener('click', function () {
+      if (map) {
+        map.remove();
+        map = null;
+        marker = null;
+      }
+    });
+
+    const allSubcategories = [
+      {% for sub in subcategories %}
+      {
+        id: {{ sub.subCategory_id }},
+        name: "{{ sub.name|escapejs }}",
+        department_id: {{ sub.department.department_id }}
+      },
+      {% endfor %}
+    ];
+
+    const allDistricts = [
+      {% for district in districts %}
+      {
+        id: {{ district.distric_id }},
+        name: "{{ district.name|escapejs }}",
+        state_id: {{ district.state.state_id }}
+      },
+      {% endfor %}
+    ];
+
+    const allComplaintsData = [
+      {% for complaint in complaints %}
+      {
+        complaint_id: "{{ complaint.complaint_id }}",
+        status: "{{ complaint.status }}",
+        department_name: "{{ complaint.department.name }}",
+        subcategory_name: "{{ complaint.subCategory.name }}",
+        created_at: "{{ complaint.created_at|date:'c' }}",
+        updated_at: "{{ complaint.updated_at|date:'c' }}",
+        description: "{{ complaint.description }}",
+        address: "{{ complaint.address }}",
+        district: "{{ complaint.district }}",
+        state: "{{ complaint.state }}",
+        pincode: "{{ complaint.pincode }}"
+      },
+      {% endfor %}
+    ];
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const departmentSelect = document.getElementById('department');
+      const subCategorySelect = document.getElementById('subCategory');
+      const stateSelect = document.getElementById('states');
+      const districtSelect = document.getElementById('districts');
+
+      stateSelect.addEventListener('change', function() {
+        const selectedStateId = parseInt(this.value);
+        districtSelect.innerHTML = '<option value="">-- Select District --</option>';
+        
+        if (!selectedStateId) return;
+        
+        const filteredDistricts = allDistricts.filter(district => district.state_id === selectedStateId);
+        
+        if (filteredDistricts.length === 0) {
+          const option = document.createElement('option');
+          option.value = "";
+          option.textContent = "No districts available";
+          districtSelect.appendChild(option);
+        } else {
+          filteredDistricts.forEach(district => {
+            const option = document.createElement('option');
+            option.value = district.id;
+            option.textContent = district.name;
+            districtSelect.appendChild(option);
+          });
+        }
+      });
+
+      departmentSelect.addEventListener('change', function() {
+        const selectedDeptId = parseInt(this.value);
+        subCategorySelect.innerHTML = '<option value="">-- Select SubCategory --</option>';
+        
+        if (!selectedDeptId) return;
+        
+        const filteredSubcategories = allSubcategories.filter(sub => sub.department_id === selectedDeptId);
+        
+        if (filteredSubcategories.length === 0) {
+          const option = document.createElement('option');
+          option.value = "";
+          option.textContent = "No subcategories available";
+          subCategorySelect.appendChild(option);
+        } else {
+          filteredSubcategories.forEach(sub => {
+            const option = document.createElement('option');
+            option.value = sub.id;
+            option.textContent = sub.name;
+            subCategorySelect.appendChild(option);
+          });
+        }
+      });
+
+      document.querySelector('.user-icon').addEventListener('click', () => {
+        document.getElementById('profileSidebar').classList.add('active');
+      });
+
+      document.getElementById('closeSidebar').addEventListener('click', () => {
+        document.getElementById('profileSidebar').classList.remove('active');
+      });
+
+      window.addEventListener('click', (event) => {
+        const sidebar = document.getElementById('profileSidebar');
+        const complaintModal = document.getElementById('complaintModal');
+        const complaintDetailModal = document.getElementById('complaintDetailModal');
+
+        if (!sidebar.contains(event.target) && !event.target.classList.contains('user-icon')) {
+          sidebar.classList.remove('active');
+        }
+        if (event.target === complaintModal) {
+          complaintModal.style.display = "none";
+          currentStep = 0;
+          showStep(currentStep);
+          document.querySelectorAll('#complaintForm [required]').forEach(input => {
+            input.style.borderColor = '';
+          });
+          complaintForm.reset();
+        }
+        if (event.target === complaintDetailModal) {
+          complaintDetailModal.style.display = "none";
+        }
+      });
+
+      document.querySelector('.close').onclick = function () {
+        document.getElementById("complaintModal").style.display = "none";
+        currentStep = 0;
+        showStep(currentStep);
+        document.querySelectorAll('#complaintForm [required]').forEach(input => {
+          input.style.borderColor = '';
+        });
+        complaintForm.reset();
+      }
+
+      document.getElementById("openComplaintModal").onclick = function () {
+        document.getElementById("complaintModal").style.display = "block";
+      }
+
+      const searchInput = document.getElementById('complaintSearch');
+      const complaintCards = document.querySelectorAll('.complaint-card');
+      const noResults = document.getElementById('noResults');
+
+      searchInput.addEventListener('keyup', function () {
+        const searchText = searchInput.value.toLowerCase();
+        let visibleCount = 0;
+
+        complaintCards.forEach(card => {
+          const text = card.textContent.toLowerCase();
+          if (text.includes(searchText)) {
+            card.style.display = 'block';
+            visibleCount++;
+          } else {
+            card.style.display = 'none';
+          }
+        });
+
+        noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+      });
+      
+      const complaintForm = document.getElementById('complaintForm');
+      const formSteps = complaintForm.querySelectorAll('.form-step');
+      let currentStep = 0;
+
+      function showStep(stepIndex) {
+        formSteps.forEach((step, index) => {
+          if (index === stepIndex) {
+            step.classList.add('active');
+          } else {
+            step.classList.remove('active');
+          }
+        });
+      }
+
+      showStep(currentStep);
+
+      complaintForm.addEventListener('click', (event) => {
+        if (event.target.classList.contains('next-step')) {
+          const currentActiveStep = formSteps[currentStep];
+          const requiredInputs = currentActiveStep.querySelectorAll('[required]');
+          let allFieldsFilled = true;
+          requiredInputs.forEach(input => {
+            if (!input.value.trim() || input.value === '') {
+              allFieldsFilled = false;
+              input.style.borderColor = 'red';
+            } else {
+              input.style.borderColor = '';
+            }
+          });
+
+          if (allFieldsFilled) {
+            if (currentStep < formSteps.length - 1) {
+              currentStep++;
+              showStep(currentStep);
+            }
+          } else {
+            showSimplePopup("Please fill in all required fields to proceed.");
+          }
+        } else if (event.target.classList.contains('prev-step')) {
+          if (currentStep > 0) {
+            currentStep--;
+            showStep(currentStep);
+          }
+        }
+      });
+
+      const complaintDetailModal = document.getElementById('complaintDetailModal');
+      const closeDetailModalBtn = document.querySelector('.close-detail-modal');
+
+      document.querySelectorAll('.view-details-btn').forEach(button => {
+        button.addEventListener('click', function () {
+          const complaintId = this.dataset.complaintId;
+          populateComplaintDetails(complaintId);
+        });
+      });
+
+      closeDetailModalBtn.onclick = function () {
+        complaintDetailModal.style.display = "none";
+      }
+
+      function populateComplaintDetails(complaintId) {
+        const complaint = allComplaintsData.find(c => String(c.complaint_id) === String(complaintId));
+
+        if (complaint) {
+          document.getElementById('detail-complaint-id').textContent = complaint.complaint_id;
+
+          const statusElement = document.getElementById('detail-status');
+          statusElement.textContent = complaint.status;
+          statusElement.className = 'status ' + complaint.status.toLowerCase().replace(/\s/g, '-');
+
+          document.getElementById('detail-department').textContent = complaint.department_name;
+          document.getElementById('detail-subcategory').textContent = complaint.subcategory_name;
+          document.getElementById('detail-created-at').textContent = new Date(complaint.created_at).toLocaleString();
+          document.getElementById('detail-description').textContent = complaint.description;
+          document.getElementById('detail-address').textContent = complaint.address;
+
+          complaintDetailModal.style.display = "block";
+        } else {
+          showSimplePopup("Complaint details not found.");
+        }
+      }
+    });
+
+    function enableEdit() {
+      document.getElementById('profileDisplay').style.display = 'none';
+      document.getElementById('profileEdit').style.display = 'flex';
+    }
+
+    function cancelEdit() {
+      document.getElementById('profileEdit').style.display = 'none';
+      document.getElementById('profileDisplay').style.display = 'block';
+    }
+
+    function showSimplePopup(message) {
+      const existing = document.getElementById('simple-popup');
+      if (existing) {
+        existing.remove();
+      }
+
+      const popup = document.createElement('div');
+      popup.id = 'simple-popup';
+      popup.textContent = message;
+
+      document.body.appendChild(popup);
+
+      setTimeout(() => {
+        popup.classList.add('hide');
+        setTimeout(() => popup.remove(), 500);
+      }, 3000);
+    }
+
+    function getCSRFToken() {
+      const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+      return cookieValue || '';
+    }
+  </script>
+</body>
+</html>
